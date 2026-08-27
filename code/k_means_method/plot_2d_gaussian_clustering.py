@@ -30,247 +30,300 @@ print(dir_path)
 
 # %%
 
-# 利用ライブラリ
+# ライブラリの読込 --------------------------------------------------------------
+
+# ライブラリを読込
 import numpy as np
 from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+
 # %%
+
+# トイデータの作成 ---------------------------------------------------------------
+
+### 生成分布の設定 -----
 
 # 真のクラスタ数を指定
 K_truth = 3
 
 # K個の平均ベクトルを指定
-mu = np.array(
+mu_kd = np.array(
     [[0.0, 5.0], 
      [5.0, -10.0], 
      [-10.0, -5.0]]
 )
 
 # K個の分散共分散行列を指定
-sigma = np.array(
+sigma2_kdd = np.array(
     [[[36.0, 10.0], [10.0, 25.0]], 
      [[9.0, -1.3], [-1.3, 16.0]], 
      [[25.0, -3.2], [-3.2, 16.0]]]
 )
 
 # 混合比率を指定
-pi = np.array([0.45, 0.25, 0.3])
+pi_k = np.array([0.45, 0.25, 0.3])
+
 
 # %%
 
-# 各軸の値を作成
-x1_vals = np.linspace(
-    np.min(mu[:, 0] - np.sqrt(sigma[:, 0, 0]) * 3.0), 
-    np.max(mu[:, 0] + np.sqrt(sigma[:, 0, 0]) * 3.0), 
-    num=300
+### 生成分布の計算 -----
+
+# x軸の範囲を設定
+u       = 1.0
+sgm_num = 3.0
+x_1_min, x_2_min = np.min(
+    [mu_kd[k] - sgm_num * np.sqrt(np.diag(sigma2_kdd[k])) for k in range(K_truth)], 
+    axis=0
 )
-x2_vals = np.linspace(
-    np.min(mu[:, 1] - np.sqrt(sigma[:, 1, 1]) * 3.0), 
-    np.max(mu[:, 1] + np.sqrt(sigma[:, 1, 1]) * 3.0), 
-    num=300
+x_1_max, x_2_max = np.max(
+    [mu_kd[k] + sgm_num * np.sqrt(np.diag(sigma2_kdd[k])) for k in range(K_truth)], 
+    axis=0
 )
+x_1_min, x_2_min = np.floor(np.array([x_1_min, x_2_min]) /u)*u # u単位で切り下げ
+x_1_max, x_2_max = np.ceil(np.array([x_1_max, x_2_max]) /u)*u  # u単位で切り上げ
+print(x_1_min, x_1_max)
+print(x_2_min, x_2_max)
 
-# 作図用の点を作成
-x1_grid, x2_grid = np.meshgrid(x1_vals, x2_vals)
+# x軸の値を作成
+x_1_vec = np.linspace(start=x_1_min, stop=x_1_max, num=251)
+x_2_vec = np.linspace(start=x_2_min, stop=x_2_max, num=251)
+print(x_1_vec[:5].round(1))
+print(x_2_vec[:5].round(1))
 
-# 作図用の点の形状を保存
-x_dim = x1_grid.shape
+# 格子点を作成
+x_1_grid, x_2_grid = np.meshgrid(x_1_vec, x_2_vec)
 
-# 計算用の点を作成
-x_points = np.stack([x1_grid.flatten(), x2_grid.flatten()], axis=1)
+# 座標を作成
+x_arr = np.stack([x_1_grid.flatten(), x_2_grid.flatten()], axis=1)
+
+# 確率密度を計算
+dens_grid = np.sum(
+    [pi_k[k] * multivariate_normal.pdf(x=x_arr, mean=mu_kd[k], cov=sigma2_kdd[k]) for k in range(K_truth)], 
+    axis=0
+).reshape(x_1_grid.shape)
+
 
 # %%
+
+### 観測データの生成 -----
 
 # データ数を指定
 N = 100
 
+# 乱数生成器を作成
+rng = np.random.default_rng(seed=102) # 
+
 # 真のクラスタを生成
-c_truth_onehot = np.random.multinomial(n=1, pvals=pi, size=N)
+c_truth_nk = rng.multinomial(n=1, pvals=pi_k, size=N)
 
 # 真のクラスタ番号を抽出
-_, c_truth = np.where(c_truth_onehot == 1)
+_, c_truth_n = np.where(c_truth_nk == 1)
+print(c_truth_n[:5])
 
 # データを生成
-X = np.array(
-    [np.random.multivariate_normal(mean=mu[j], cov=sigma[j], size=1).flatten() for j in c_truth]
+x_nd = np.array(
+    [rng.multivariate_normal(mean=mu_kd[k], cov=sigma2_kdd[k], size=1).flatten() for k in c_truth_n]
 )
+print(x_nd[:5])
+
 
 # %%
 
-# クラスタ数の初期値を指定
-K = 10
+# クラスタリング ----------------------------------------------------------------
 
-# ランダムにクラスタを割り当て
-c_onehot = np.random.multinomial(n=1, pvals=np.repeat(1, K)/K, size=N)
+### クラスタの推定 -----
 
-# クラスタ番号を抽出
-_, c = np.where(c_onehot == 1)
+## clustering.pyを参照
 
-# クラスタごとのデータ数を集計
-G_num = np.sum(c_onehot, axis=0)
+# 初期化手法を指定
+init_type = 'random_samples'
 
-# クラスタの代表値(平均値)を計算
-Z = np.array(
-    [np.mean(X[c == j], axis=0) for j in range(K)]
+# クラスタの初期値を指定
+K_init = 3
+
+# クラスタを推定
+trace_res_dic = k_means_method(
+    x_nd, K=K_init, 
+    lower_clust_num=10, init_centroid=init_type, 
+    rng=rng
 )
 
-# 目的関数(ノルムの2乗平均)を計算
-J = np.array(
-    [np.sum(np.linalg.norm(X[c == j] - Z[j], axis=1)**2) / N for j in range(K)]
-)
+
+# 試行回数を取得
+iter_num = max(trace_res_dic.keys()) + 1
+print(iter_num)
+
+# 目的関数を計算
+trace_c_lt = [
+    trace_res_dic[iter_cnt][0] for iter_cnt in range(iter_num)
+]
+trace_z_lt = [
+    trace_res_dic[iter_cnt][1] for iter_cnt in range(iter_num)
+]
+trace_J_lt = [
+    np.mean(
+        np.sum((x_nd - trace_z_lt[iter_cnt][trace_c_lt[iter_cnt]])**2, axis=1)
+    ) for iter_cnt in range(iter_num)
+]
+
+# 軸の範囲を設定
+u = 5.0
+J_min = 0.0
+J_max = np.max(trace_J_lt)
+J_max = np.ceil(J_max /u)*u  # u単位で切り上げ
+print(J_min, J_max)
+
 
 # %%
 
-# クラスタ数の初期値を指定
-K = 10
-
-# ランダムにクラスタの代表値を設定
-Z = np.array(
-    [np.random.uniform(low=X[:, 0].min(), high=X[:, 0].max(), size=K), 
-     np.random.uniform(low=X[:, 1].min(), high=X[:, 1].max(), size=K)]
-).T
-
-# ノルムが最小のクラスタを割り当て
-c = np.argmin(
-    [np.linalg.norm(X - Z[j], axis=1) for j in range(K)], 
-    axis=0
-)
-
-# クラスタごとのデータ数を集計
-G_num = np.array(
-    [np.sum(c == j) for j in range(K)]
-)
-
-# 目的関数(ノルムの2乗平均)を計算
-J = np.array(
-    [np.sum(np.linalg.norm(X[c == j] - Z[j], axis=1)**2) / N for j in range(K)]
-)
-
-# %%
-
-# クラスタの最低割り当て数を指定
-G_num_lower = 10
-
-# 更新量の閾値を指定
-threshold = 0.001
-
-# 初期値を記録
-trace_Z = [Z]
-trace_c = [c]
-trace_G = [G_num]
-trace_J = [J]
-# 繰り返し試行
-cnt = 0
-old_J_sum = np.sum(J)
-while True:
-    
-    # 試行回数をカウント
-    cnt += 1
-    print('--- iter:' + str(cnt) + ' ---')
-    
-    # クラスタの代表値(平均値)を計算
-    Z = np.array(
-        [np.mean(X[c == j], axis=0) for j in range(K) if G_num[j] >= G_num_lower]
-    )
-    
-    # クラスタ数を再設定
-    K = len(Z)
-    print('K=' + str(K))
-
-    # ノルムが最小のクラスタを割り当て
-    c = np.argmin(
-        [np.linalg.norm(X - Z[j], axis=1) for j in range(K)], 
-        axis=0
-    )
-
-    # クラスタごとのデータ数を集計
-    G_num = np.array(
-        [np.sum(c == j) for j in range(K)]
-    )
-    print('|G|=' + str(G_num))
-
-    # 目的関数(ノルムの2乗平均)を計算
-    J = np.array(
-        [np.sum(np.linalg.norm(X[c == j] - Z[j], axis=1)**2) / N for j in range(K)]
-    )
-    J_sum = np.sum(J)
-    print('J=' + str(J_sum.round(5)))
-    
-    # 更新値を記録
-    trace_Z.append(Z)
-    trace_c.append(c)
-    trace_G.append(G_num)
-    trace_J.append(J)
-    
-    # 更新量が閾値未満なら終了
-    if abs(J_sum - old_J_sum) < threshold:
-        break
-    
-    # 目的関数の値を保存
-    old_J_sum = J_sum
-
-# %%
+### 推移の可視化 -----
 
 # フレーム数を設定
-frame_num = cnt
+frame_num = iter_num
 
-# カラーマップを指定
-cm = plt.get_cmap('gist_rainbow')
-colors = cm(np.arange(len(trace_Z[0])) / len(trace_Z[0]))
-
-# クラスタ数の削減に応じて色を入れ替え
-colors_lt = [colors]
-for i in range(frame_num):
-    colors = colors[np.argsort(-np.int16(trace_G[i] >= G_num_lower))] # 継続するクラスタ番号の色を前に出す
-    colors_lt.append(colors)
+# カラーマップを作成
+cmap   = plt.get_cmap('gist_rainbow') # カラーマップを指定
+colors = cmap(np.arange(K_init) / K_init) # 色データを作成
 
 # グラフオブジェクトを初期化
-fig, ax = plt.subplots(figsize=(12, 9), facecolor='white')
-fig.suptitle('k-means clustering', fontsize=20)
+fig, axes = plt.subplots(
+    nrows=2, ncols=1, height_ratios=[2, 1], 
+    figsize=(9, 9), dpi=100, facecolor='white', 
+    constrained_layout=True
+)
+fig.suptitle('k-means method', fontsize=20)
 
-# 作図処理を関数として定義
-def update(i):
-    
+# 初期化処理を定義
+def init():
+    pass
+
+# 作図処理を定義
+def update(frame_i):
+
     # 前フレームのグラフを初期化
-    plt.cla()
-    
-    # i回目の値を取得
-    Z = trace_Z[i]
-    c = trace_c[i]
-    G_num = trace_G[i]
-    J = trace_J[i]
-    colors = colors_lt[i]
-    
-    # クラスタ数を再設定
-    K = len(Z)
-    
-    # 2Dベクトルのクラスタを作図
-    for j in range(K):
-        G_j, = np.where(c == j) # クラスタjのデータインデック
-        ax.plot([Z[j, 0].repeat(len(G_j)), X[G_j, 0]], 
-                [Z[j, 1].repeat(len(G_j)), X[G_j, 1]], 
-                color=colors[j], linewidth=1, linestyle=':', zorder=0) # 対応線
-        ax.scatter(x=Z[j, 0], y=Z[j, 1], 
-                   edgecolor=colors[j], facecolor='white', marker='s', s=100) # 代表値
-        ax.scatter(x=X[G_j, 0], y=X[G_j, 1], 
-                   color=colors[j], s=20, label=str(j+1)) # サンプルデータ
-    ax.set_title('iter:' + str(i) + ', ' + 
-                 'K=' + str(K) + '\n' + 
-                 '$N=' + str(N) + '=(' + ', '.join(map(str, G_num)) + ')$\n' + 
-                 '$J=' + str(np.sum(J).round(1)) + '=(' + ', '.join(map(str, J.round(1))) + ')$', loc='left')
+    [ax.cla() for ax in axes]
+
+    # 試行回数を取得
+    iter_cnt = frame_i
+
+    ## 推定クラスタの作図
+
+    # クラスタデータを取得
+    c_n, z_kd = trace_res_dic[iter_cnt]
+
+    # クラスタ数を取得
+    K = len(z_kd)
+
+    # クラスタの割当数を集計
+    N_k = np.array(
+        [np.sum(c_n == k) for k in range(K)]
+    ) # 度数
+
+    # 目的関数を計算
+    J = np.mean(
+        np.sum((x_nd - z_kd[c_n])**2, axis=1) # ノルムの2乗
+    ) # ノルムの2乗平均
+
+    # ラベルを作成
+    param_lbl  = f'iteration: {iter_cnt}\n'
+    param_lbl += f'$N = {N}, K = {len(np.unique(c_n))}, J = {J:.3f}$'
+
+    # 凡例表示用のリストを初期化
+    cent_lt = []
+    obs_lt  = []
+
+    # 推定クラスタを描画
+    ax = axes[0]
+    ax.contour(
+        x_1_grid, x_2_grid, dens_grid, 
+        linewidths=1.0, linestyles='--', 
+        zorder=10
+    ) # 生成分布
+    for k in range(K):
+        # クラスタのラベルを作成
+        z_str     = ', '.join([f'{z:.1f}' for z in z_kd[k]])
+        cent_lbl  = f'$k = {k+1}, z_k = ({z_str})$'
+        clust_lbl = f'$k = {k+1}, N_k = {N_k[k]}$'
+
+        clust_idx, = np.where(c_n == k) # クラスタの割当インデックス
+        ax.plot(
+            [z_kd[k, 0].repeat(N_k[k]), x_nd[clust_idx, 0]], 
+            [z_kd[k, 1].repeat(N_k[k]), x_nd[clust_idx, 1]], 
+            color=colors[k], linewidth=1.0, linestyle=':', 
+            zorder=20
+        ) # 対応線
+        cent_sc = ax.scatter(
+            x=z_kd[k, 0], y=z_kd[k, 1], 
+            facecolor='white', edgecolor=colors[k], s=150, marker='s', 
+            label=cent_lbl, 
+            zorder=21
+        ) # 代表値
+        obs_sc = ax.scatter(
+            x=x_nd[clust_idx, 0], y=x_nd[clust_idx, 1], 
+            color=colors[k], s=50, 
+            label=clust_lbl, 
+            zorder=31
+        ) # 観測値
+
+        # 描画オブジェクトを保存
+        cent_lt.append(cent_sc)
+        obs_lt.append(obs_sc)
+
+    # 凡例を装飾
+    legend1 = ax.legend(
+        handles=obs_lt, 
+        title='observation data', 
+        bbox_to_anchor=(1.0, 1.0), loc='upper left', 
+        fontsize=10
+    )
+    ax.add_artist(legend1)
+    ax.legend(
+        handles=cent_lt, 
+        title='centroids', 
+        bbox_to_anchor=(1.0, 0.5), loc='upper left', 
+        fontsize=10
+    )
+
     ax.set_xlabel('$x_1$')
     ax.set_ylabel('$x_2$')
+    ax.set_title(param_lbl, loc='left')
     ax.grid()
-    ax.legend(title='cluster', loc='upper left')
-    ax.set_aspect('equal')
+    ax.set_xlim(xmin=x_1_min, xmax=x_1_max)
+    ax.set_ylim(ymin=x_2_min, ymax=x_2_max)
 
-# gif画像を作成
-ani = FuncAnimation(fig=fig, func=update, frames=frame_num, interval=300)
+    ## 目的関数の推移の作図
 
-# gif画像を保存
-ani.save('k_means_gaussian_2d.gif')
+    # 目的関数の推移を描画
+    ax = axes[1]
+    ax.plot(
+        np.arange(iter_cnt+1), trace_J_lt[:(iter_cnt+1)]
+    ) # 目的関数の推移
+    ax.scatter(
+        x=iter_cnt, y=trace_J_lt[iter_cnt], 
+        s=50
+    ) # 目的関数の値
+
+    ax.set_xlabel('iteration')
+    ax.set_ylabel('$J = \\frac{1}{n} \\sum_{i=1}^n \\|x_i - z_{c_i}\\|^2$')
+    ax.grid()
+    ax.set_xlim(xmin=0, xmax=iter_num-1)
+    ax.set_ylim(ymin=J_min, ymax=J_max)
+
+
+# 動画を作成
+anim = FuncAnimation(
+    fig=fig, func=update, init_func=init, 
+    frames=frame_num, interval=250
+)
+
+# 動画を書出
+anim.save(
+    filename=dir_path+f'2d_clustering_{init_type}_init_K_{K_init}.mp4', 
+    progress_callback=lambda i, n: print(f'\rframe: {i+1} / {n}', end='', flush=True)
+)
+
 
 # %%
 

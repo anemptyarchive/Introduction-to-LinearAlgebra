@@ -73,28 +73,28 @@ pi_k = np.array([0.45, 0.25, 0.3])
 # x軸の範囲を設定
 u       = 1.0
 sgm_num = 3.0
-x_1_min, x_2_min = np.min(
+x_0_min, x_1_min = np.min(
     [mu_kd[k] - sgm_num * np.sqrt(np.diag(sigma2_kdd[k])) for k in range(K_truth)], 
     axis=0
 )
-x_1_max, x_2_max = np.max(
+x_0_max, x_1_max = np.max(
     [mu_kd[k] + sgm_num * np.sqrt(np.diag(sigma2_kdd[k])) for k in range(K_truth)], 
     axis=0
 )
-x_1_min, x_2_min = np.floor(np.array([x_1_min, x_2_min]) /u)*u # u単位で切り下げ
-x_1_max, x_2_max = np.ceil(np.array([x_1_max, x_2_max]) /u)*u  # u単位で切り上げ
+x_0_min, x_1_min = np.floor(np.array([x_0_min, x_1_min]) /u)*u # u単位で切り下げ
+x_0_max, x_1_max = np.ceil(np.array([x_0_max, x_1_max]) /u)*u  # u単位で切り上げ
+print(x_0_min, x_0_max)
 print(x_1_min, x_1_max)
-print(x_2_min, x_2_max)
 
 # x軸の値を作成
+x_0_vec = np.linspace(start=x_0_min, stop=x_0_max, num=251)
 x_1_vec = np.linspace(start=x_1_min, stop=x_1_max, num=251)
-x_2_vec = np.linspace(start=x_2_min, stop=x_2_max, num=251)
 
 # 格子点を作成
-x_1_grid, x_2_grid = np.meshgrid(x_1_vec, x_2_vec)
+x_0_grid, x_1_grid = np.meshgrid(x_0_vec, x_1_vec)
 
 # 座標を作成
-x_arr = np.stack([x_1_grid.flatten(), x_2_grid.flatten()], axis=1)
+x_arr = np.stack([x_0_grid.flatten(), x_1_grid.flatten()], axis=1)
 
 # %%
 
@@ -102,7 +102,7 @@ x_arr = np.stack([x_1_grid.flatten(), x_2_grid.flatten()], axis=1)
 dens_grid = np.sum(
     [pi_k[k] * multivariate_normal.pdf(x=x_arr, mean=mu_kd[k], cov=sigma2_kdd[k]) for k in range(K_truth)], 
     axis=0
-).reshape(x_1_grid.shape)
+).reshape(x_0_grid.shape)
 
 
 # %%
@@ -235,7 +235,7 @@ def update(frame_i):
     # 推定クラスタを描画
     ax = axes[0]
     ax.contour(
-        x_1_grid, x_2_grid, dens_grid, 
+        x_0_grid, x_1_grid, dens_grid, 
         linewidths=1.0, linestyles='--', 
         zorder=10
     ) # 生成分布
@@ -288,8 +288,8 @@ def update(frame_i):
     ax.set_ylabel('$x_2$')
     ax.set_title(param_lbl, loc='left')
     ax.grid()
-    ax.set_xlim(xmin=x_1_min, xmax=x_1_max)
-    ax.set_ylim(ymin=x_2_min, ymax=x_2_max)
+    ax.set_xlim(xmin=x_0_min, xmax=x_0_max)
+    ax.set_ylim(ymin=x_1_min, ymax=x_1_max)
 
     ## 目的関数の推移の作図
 

@@ -89,14 +89,14 @@ print(x_2_min, x_2_max)
 # x軸の値を作成
 x_1_vec = np.linspace(start=x_1_min, stop=x_1_max, num=251)
 x_2_vec = np.linspace(start=x_2_min, stop=x_2_max, num=251)
-print(x_1_vec[:5].round(1))
-print(x_2_vec[:5].round(1))
 
 # 格子点を作成
 x_1_grid, x_2_grid = np.meshgrid(x_1_vec, x_2_vec)
 
 # 座標を作成
 x_arr = np.stack([x_1_grid.flatten(), x_2_grid.flatten()], axis=1)
+
+# %%
 
 # 確率密度を計算
 dens_grid = np.sum(
@@ -113,7 +113,7 @@ dens_grid = np.sum(
 N = 100
 
 # 乱数生成器を作成
-rng = np.random.default_rng(seed=102) # 
+rng = np.random.default_rng(seed=102)
 
 # 真のクラスタを生成
 c_truth_nk = rng.multinomial(n=1, pvals=pi_k, size=N)
@@ -151,6 +151,10 @@ trace_res_dic = k_means_method(
 )
 
 
+# %%
+
+### 推移の可視化 -----
+
 # 試行回数を取得
 iter_num = max(trace_res_dic.keys()) + 1
 print(iter_num)
@@ -168,6 +172,7 @@ trace_J_lt = [
     ) for iter_cnt in range(iter_num)
 ]
 
+
 # 軸の範囲を設定
 u = 5.0
 J_min = 0.0
@@ -175,10 +180,7 @@ J_max = np.max(trace_J_lt)
 J_max = np.ceil(J_max /u)*u  # u単位で切り上げ
 print(J_min, J_max)
 
-
 # %%
-
-### 推移の可視化 -----
 
 # フレーム数を設定
 frame_num = iter_num
@@ -205,16 +207,12 @@ def update(frame_i):
     # 前フレームのグラフを初期化
     [ax.cla() for ax in axes]
 
-    # 試行回数を取得
-    iter_cnt = frame_i
+    # 値を取得
+    iter_cnt  = frame_i # 試行番号
+    c_n, z_kd = trace_res_dic[iter_cnt] # クラスタデータ
+    K = len(z_kd) # クラスタ数
 
     ## 推定クラスタの作図
-
-    # クラスタデータを取得
-    c_n, z_kd = trace_res_dic[iter_cnt]
-
-    # クラスタ数を取得
-    K = len(z_kd)
 
     # クラスタの割当数を集計
     N_k = np.array(
@@ -230,7 +228,7 @@ def update(frame_i):
     param_lbl  = f'iteration: {iter_cnt}\n'
     param_lbl += f'$N = {N}, K = {len(np.unique(c_n))}, J = {J:.3f}$'
 
-    # 凡例表示用のリストを初期化
+    # 受け皿を初期化
     cent_lt = []
     obs_lt  = []
 
@@ -253,7 +251,7 @@ def update(frame_i):
             [z_kd[k, 1].repeat(N_k[k]), x_nd[clust_idx, 1]], 
             color=colors[k], linewidth=1.0, linestyle=':', 
             zorder=20
-        ) # 対応線
+        ) # クラスタの対応線
         cent_sc = ax.scatter(
             x=z_kd[k, 0], y=z_kd[k, 1], 
             facecolor='white', edgecolor=colors[k], s=150, marker='s', 
@@ -303,14 +301,13 @@ def update(frame_i):
     ax.scatter(
         x=iter_cnt, y=trace_J_lt[iter_cnt], 
         s=50
-    ) # 目的関数の値
+    ) # 目的関数の現在値
 
     ax.set_xlabel('iteration')
     ax.set_ylabel('$J = \\frac{1}{n} \\sum_{i=1}^n \\|x_i - z_{c_i}\\|^2$')
     ax.grid()
     ax.set_xlim(xmin=0, xmax=iter_num-1)
     ax.set_ylim(ymin=J_min, ymax=J_max)
-
 
 # 動画を作成
 anim = FuncAnimation(
